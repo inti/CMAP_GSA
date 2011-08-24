@@ -2,34 +2,10 @@
     This program allows to perform gene-set analyses with the results of the Connectivity Map project. Please see the CMAP
 project website for details of its nature www.broadinstitute.org/cmap/.
 
-* Details
-User must provide a file with a list of genes and a associated tag (e.g., genes associated with a disease). 
-    The program will:
-    - rank drugs based on the differential expression of these genes compared with all other tested. 
-    - rank diseases based on known drugs used to treat them, i.e. disease whose drugs affect the expression of the input
-      genes.
-    - Similarly to rank disease it will provide a rank of mechanisms of known action for the drugs.
-These ranks can either be calculated as a test of differential expression (one sided or two sided test) or as Area Under
-the Curve (AUC) value. AUC values have the advantage of providing natural measure of how well the expression profile of 
-the input genes classify diseases and drugs machanisms of action. Test of differential expression are probably more
-suited is the objective of the analysis is to rank drugs.
-We provide a drug-to-disease and drug-to-mechanism_of_action mapping based on the Clinical Trials (http://clinicaltrials.gov/) and the MeSH
-annotations (www.nlm.nih.gov/mesh/). However, used can provide additional mapping for the drugs identifiers, e.g., diseases classes like 
-nerveous system or immune-disease, main target tissue or associated side effects.
+See https://github.com/inti/CMAP_GSA/wiki for additional details.
 
-* Program dependencies
-In order to run the program you will need R (www.r-project.org) and the following R packages:
-- plyr
-- ggplot2
-- pROC
-
-* Examples:
+* BUGS and questions
+In case of bugs or question please e-mail Inti Pedroso <intipedroso@gmail.com> or Gerome Breen <gerome.breen@gmail.com>
 
 
-* References
 
-* TODO
-- add PAGE analysis to script
-- add FDR control
-- add files with mechanism of action
-- Write examples
