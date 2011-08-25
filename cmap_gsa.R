@@ -6,23 +6,7 @@ print_OUT<-function(string,LOG){
   print(paste(date(),"      ",string),quote = FALSE)  
 }
 
-z_value = function(z,w = rep(length(z), 1/length(z)),cov = diag(x = 1, length(z), length(z))){
-    z_fix<- sum(z*w)/sum(w,na.rm=TRUE)
-    v_fix<- sum( w %x% t(w) * cov ,na.rm=TRUE)
-    return(z_fix/sqrt(v_fix));
-}
-
 page_z<-function(Sm,mu,m,rho ){  sqrt(m)*(Sm - mu)/rho  }
-
-test_enrichment = function(data,one_sided,cor_correction = FALSE){
-
-        if (one_sided == "TRUE") {
-                de = apply(data, 1, function(lfc)   z_value(z=lfc, cov=c_m) )
-        } else { # else is two sided test
-                de = apply(data, 1, function(lfc)   z_value(z=lfc, cov=c_m) )
-        }
-        return(de);
-}
 
 #########
 suppressPackageStartupMessages(library("plyr"))
@@ -48,7 +32,12 @@ option_list <- list(
     make_option(c("--n_perm"), default= 0,type="integer", help="Number of permutation to calculate the null distribution and significance for  enrichmet results", metavar=NULL),
     make_option(c("--one_sided"), action="store_true",default= TRUE,type="logical", help="Enrichment test is one sided. Differential regulation regarding is up or down", metavar=NULL),
     make_option(c("--two_sided"), action="store_true",default= FALSE, dest="one_sided",type="logical", help="Enrichment test is two sided. Test both up and down regulation separately", metavar=NULL),    
-    make_option(c("--lfdr"), action="store_true",default= FALSE,type="logical", help="Calculate local FDR values for PAGE results", metavar=NULL)
+    make_option(c("--lfdr"), action="store_true",default= FALSE,type="logical", help="Calculate local FDR values for PAGE results", metavar=NULL),
+    make_option(c("--hugo_id"), action="store_true",default= TRUE,type="logical", help="User gene ids are Hugo symbols", metavar=NULL),
+    make_option(c("--ensembl_id"), action="store_true",dest="hugo_id",default= FALSE,type="logical", help="User gene ids are ensembl gene ids", metavar=NULL),
+    make_option(c("--collapse_probes_mean"), action="store_true",default= FALSE,type="logical", help="Collapse probe level information into a single gene-leve value by averaging individual probe values", metavar=NULL),
+    make_option(c("--collapse_probes_abs_max"), action="store_true",default= FALSE,type="logical", help="Choose the row with the highest absolute value", metavar=NULL),	
+    make_option(c("--collapse_probes_abs_min"), action="store_true",default= FALSE,type="logical", help="Choose the row with the lowest absolute value", metavar=NULL)
 )
 
 # get command line options, if help option encountered print help and exit, 
@@ -82,6 +71,11 @@ load("data/CMAP.RData")
 # read probe annotation 
 print_OUT("Loading AFFY probes to gene mapping to parse CMAP data from [ data/probes_annotation.txt ]")
 probe_annot<-read.table("data/probes_annotation.txt",header=T,sep="\t")
+#print_OUT("Detecting probes that match to more than one gene")
+#probe_annot = ddply(probe_annot, .(affy_hg_u133_plus_2), function(d) if (length(unique(d$ensembl_gene_id)) == 1){return(d)},.progress=create_progress_bar(name="text"),.parallel=T)
+
+print_OUT("Filtering out probes matching to multiple genes")
+avg_data = avg_data[,unique(probe_annot$affy_hg_u133_plus_2)]
 
 # read drug trials information
 print_OUT(paste("Reading conditions for genes from [ ",opt$clinical_trials," ]",sep=""))
@@ -103,7 +97,36 @@ data=read.table(file=opt$gene_file,sep="\t")
 colnames(data)=c("condition","gene_id")
 data$gene_id = toupper(data$gene_id)
 # add annotation to data.
-annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="hgnc_symbol")
+if (opt$hugo_id == FALSE){
+	annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="ensembl_gene_id")
+} else {
+	annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="hgnc_symbol")
+}
+
+##### Define CMAP DATA
+
+collapse_method = 0;
+if ( opt$collapse_probes_mean == TRUE ){
+	# summarise the log-fold-change values at the gene level
+	collapse_method = "Average"; # default avegare across genes
+}
+if (opt$collapse_probes_abs_max == TRUE) {
+	collapse_method = "absMaxMean"; # max abs value
+}
+if (opt$collapse_probes_abs_min == TRUE ){
+	collapse_method = "absMinMean"; # min absolute value
+}
+if (collapse_method != 0){
+	print_OUT("Collapsing probe values at gene level")
+	suppressPackageStartupMessages(library(WGCNA,lib.loc="~/scratch/DATA/Rlibraries/"))
+	gene_id = ddply(probe_annot, .(affy_hg_u133_plus_2), summarise, gene_id=unique(ensembl_gene_id),.parallel=T)
+	data = t(avg_data)
+	data = collapseRows( data,rowGroup = gene_id$gene_id,rowID = rownames(data),method=collapse_method)
+	avg_data = t(data$datETcollapsed)
+	tmp_cols=data.frame(colnames(avg_data))
+	annotated_data2=merge(annotated_data,tmp_cols,by.x="ensembl_gene_id",by.y="colnames.avg_data.")
+}
+
 
 ##### PAGE analysis #####
 if (opt$gsa == "TRUE"){
@@ -119,7 +142,11 @@ if (opt$gsa == "TRUE"){
 
 	drug_de_df=ddply(annotated_data, .(condition), function(d) {
 	                d=unique(d);
-	                cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
+			if (collapse_method != "NULL"){
+	                	cmap_subset=avg_data[,d$ensembl_gene_id];
+			} else {
+				cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
+			}
 			if (opt$one_sided == "TRUE") {
 				
                 		observed_page_z = ldply(rownames(cmap_subset), function(drug)  {
@@ -222,7 +249,7 @@ if (opt$gsa == "TRUE"){
 ##### AUC analysis #####
 # For condition get the gene data across all drugs instances and calculate the eigen values.
 # return a list on which each element is a matrix with the PC for each condition.
-if (length(opt$auc) != 0 ) {
+if (opt$auc == TRUE ) {
 	print_OUT("Calculating PCA for each gene-set");
 	print_OUT(paste("   '-> Selecting for analysis PC explaining more than [ ", opt$pc_var ," ] of variation.",sep=""));
 	drug_pca_df=dlply(annotated_data, .(condition), function(d) {
