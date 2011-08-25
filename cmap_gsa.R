@@ -17,7 +17,7 @@ suppressPackageStartupMessages(library("optparse",lib.loc="~/scratch/DATA/Rlibra
 option_list <- list(
     make_option(c("-v", "--verbose"), action="store_true", default=TRUE, help="Print extra output [default]"),
     make_option(c("-q", "--quietly"), action="store_false", dest="verbose", help="Print little output"),
-    make_option(c("-o","--outfile"), type="character", default="forge.out.txt", help="Output file Name", metavar=NULL),
+    make_option(c("-o","--outfile"), type="character", default="cmap_gsa.out.txt", help="Output file Name", metavar=NULL),
     make_option(c("-d","--distance"), type="integer", default=20, help="Max SNP-to-gene distance allowed (in kb)", metavar=NULL),
     make_option(c("--gene_file"), type="character", help="File with genes to be analyse", metavar=NULL),
     make_option(c("--clinical_trials"), default= "data/trials_4_cmap_drugs.txt",type="character", help="File with gene conditions", metavar=NULL),
@@ -38,8 +38,17 @@ opt <- parse_args(OptionParser(option_list=option_list))
 # received as input a file with genes and conditions test is the expression of the genes is affected in the CMAP data.
 ###########
 
+# Check user has provided all necesary options
+if (length(opt$gene_file) == 0){
+	print_OUT("Need to provide a files with gene ids and conditions.");
+	print_OUT("Finishing execution now.");
+	quit();
+}
+
+##### NOW PROCEED WITH THE ANALYSIS
+
 # load CMAP data
-print_OUT("Loading CMAP data from [ data/CMAP.RData ]")
+print_OUT("Loading CMAP data from [ data/CMAP.RData ]. It may take a few minutes.")
 load("data/CMAP.RData") 
 
 # read probe annotation 
@@ -155,10 +164,10 @@ l_ply(names(eigen_vector_auc_table), function(condition) {
 					panel.grid.major=theme_blank(),
 					axis.line=theme_segment(),
 					legend.position="none");
-			file_plot=paste("test_AUCs.",condition,".pdf",sep="");
+			file_plot=paste(opt$outfile,condition,".pdf",sep="");
 			ggsave(plot=plot,file=file_plot,width=15,height=7);
 		}
-		file_table=paste("test_AUCs.",condition,".txt",sep="");
+		file_table=paste(opt$outfile,condition,".txt",sep="");
 		write.table(data,file=file_table,quote=FALSE,row.names=F,col.names=T,sep="\t");
 	}
 ,.progress=create_progress_bar(name="text"))
