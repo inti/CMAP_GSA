@@ -73,7 +73,7 @@ trials_phase_4=ddply(trials_phase_4, .(disease), function(data) {
 print_OUT(paste("Reading gene-sets of to be analysed from [ ",opt$gene_file," ]",sep=""))
 data=read.table(file=opt$gene_file,sep="\t")
 colnames(data)=c("condition","gene_id")
-
+data$gene_id = toupper(data$gene_id)
 # add annotation to data.
 annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="hgnc_symbol")
 
@@ -97,6 +97,8 @@ drug_pca_df=dlply(annotated_data, .(condition), function(d) {
 	} 
 ,.progress=create_progress_bar(name="text"),.parallel=F)
 
+
+print_OUT("Calculating AUC values for each PC on each condition of interest.");
 eigen_vector_auc_table = llply(names(drug_pca_df), function(condition) {
 		rot = drug_pca_df[[condition]];
                 target = llply(unique(rot$disease), function(condition)   abs(rot$disease == condition)    );
@@ -138,13 +140,16 @@ eigen_vector_auc_table = llply(names(drug_pca_df), function(condition) {
 names(eigen_vector_auc_table)=names(drug_pca_df);
 
 # PLOT TO FILES
+if (opt$plot == TRUE){
+	print_OUT("Writting output files and plots");
+} else {
+	print_OUT("Writting output files");
+}
 
 l_ply(names(eigen_vector_auc_table), function(condition) {
 		data=eigen_vector_auc_table[[ condition  ]];
 		data$touch_05 = abs( (data$low_ci - 0.5)*( data$up_ci - 0.5 )  > 0 );
 		data_filtered = data[which(data$touch_05 > 0),];
-		#data_filtered = ddply(data, .(disease), function(d)  if(sum(d$touch_05) > 0) { return(d) });
-		#data_filtered$disease<-factor(data_filtered$disease, levels=  unique(factor(data_filtered$disease)));
 		data_filtered$disease<-factor(data_filtered$disease, levels=  unique(factor(data_filtered[order(data_filtered$low_ci),"disease"])));
 		data$condition = condition
 		#my_manual_col=c("grey","black")
@@ -153,6 +158,7 @@ l_ply(names(eigen_vector_auc_table), function(condition) {
 		#}
 		dodge = position_dodge(width = 0.9, height = NULL)
 		if (opt$plot == TRUE){
+		        #data_filtered[,"disease"]=as.factor(as.character(data_filtered[,"disease"]));
 			plot=ggplot(data=data_filtered, aes(x=disease,y=median)) + 
 				geom_point(col="black", position=dodge) +
 				geom_linerange(aes(ymin=low_ci,ymax=up_ci),col="grey", position=dodge) + 
@@ -173,4 +179,4 @@ l_ply(names(eigen_vector_auc_table), function(condition) {
 ,.progress=create_progress_bar(name="text"))
 
 
-
+print_OUT("Analysis finished.")
