@@ -20,7 +20,7 @@ option_list <- list(
     make_option(c("-o","--outfile"), type="character", default="forge.out.txt", help="Output file Name", metavar=NULL),
     make_option(c("-d","--distance"), type="integer", default=20, help="Max SNP-to-gene distance allowed (in kb)", metavar=NULL),
     make_option(c("--gene_file"), type="character", help="File with genes to be analyse", metavar=NULL),
-    make_option(c("--clinical_trials"), default= "trials_4_cmap_drugs.txt.v2.reformat",type="character", help="File with gene conditions", metavar=NULL),
+    make_option(c("--clinical_trials"), default= "data/trials_4_cmap_drugs.txt",type="character", help="File with gene conditions", metavar=NULL),
     make_option(c("--pc_var"), default= 0.05,type="double", help="Threshold of variance explained to include PC in analysis", metavar=NULL),
     make_option(c("--auc"), action="store_true", default= FALSE, help="Calcukate Area Under the Curve", metavar=NULL),	
     make_option(c("-b","--bootstraping"), action="store_true", default= "FALSE", help="Set AUC calculation on bootstraping mode. Default: DeLong method.", metavar=NULL),
@@ -39,12 +39,12 @@ opt <- parse_args(OptionParser(option_list=option_list))
 ###########
 
 # load CMAP data
-print_OUT("Loading CMAP data from [ combine_cmap_values.RData ]")
-load("combine_cmap_values.RData") 
+print_OUT("Loading CMAP data from [ data/CMAP.RData ]")
+load("data/CMAP.RData") 
 
 # read probe annotation 
-print_OUT("Loading AFFY probes to gene mapping to parse CMAP data from [ ratioMatrix.txt_prob_id.annot ]")
-probe_annot<-read.table("ratioMatrix.txt_prob_id.annot",header=T,sep="\t")
+print_OUT("Loading AFFY probes to gene mapping to parse CMAP data from [ data/probes_annotation.txt ]")
+probe_annot<-read.table("data/probes_annotation.txt",header=T,sep="\t")
 
 # read drug trials information
 print_OUT(paste("Reading conditions for genes from [ ",opt$clinical_trials," ]",sep=""))

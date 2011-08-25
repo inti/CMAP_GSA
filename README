@@ -7,5 +7,16 @@ See https://github.com/inti/CMAP_GSA/wiki for additional details.
 * BUGS and questions
 In case of bugs or question please e-mail Inti Pedroso <intipedroso@gmail.com> or Gerome Breen <gerome.breen@gmail.com>
 
+* Files in the distribution
+README = this readme fiel
+cmap_gsa.R = main R script to perform analyses
+data: folder with data files 
+- trials_4_cmap_drugs.txt = table with constructec with the clinicaltrials.gov data base with drug for each diseases. It provides the phase of the clinical trial as well as the name of the diease and drug.
+- CMAP.RData = R compressed binary data with the fold-change, log fold-change and averaged log fold-change values for each drug.
+example: folder with example files
+- gwascatalog_10_december_2010.txt = genes mapped to genome-wide significant SNPs (i.e. with p-values < 5x10-8) reported on the GWAS Catalogue (www.genome.gov/gwastudies) as of 10th of December, 2010.
+- wtcc1_gene_sets.txt = significant gene-sets from the re-analysis of the WTCCC1 GWAS performed with the FORGE software by Pedroso et al (unpublished) 
+- wtcc1_genes.txt = as above but sinificant genes.
+- wtcc1_snps.txt = genome-wide significant SNPs reported by the WTCCC1.
 
 
