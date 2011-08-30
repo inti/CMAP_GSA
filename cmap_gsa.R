@@ -254,7 +254,12 @@ if (opt$auc == TRUE ) {
 	print_OUT(paste("   '-> Selecting for analysis PC explaining more than [ ", opt$pc_var ," ] of variation.",sep=""));
 	drug_pca_df=dlply(annotated_data, .(condition), function(d) {
 			d=unique(d);
-			cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
+			if (collapse_method != "NULL"){
+                                cmap_subset=avg_data[,d$ensembl_gene_id];
+                        } else {
+                                cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
+                        }
+
 			drug_pca=prcomp(t(cmap_subset),center=T,scale=T);
 			matrix=summary(drug_pca)[["importance"]]
 			good_pcs<-which(matrix["Proportion of Variance",] >= opt$pc_var);
