@@ -12,7 +12,7 @@ page_z<-function(Sm,mu,m,rho ){  sqrt(m)*(Sm - mu)/rho  }
 suppressPackageStartupMessages(library("plyr"))
 suppressPackageStartupMessages(library(pROC,lib.loc="~/scratch/DATA/Rlibraries/"))
 
-# library to use command line options
+## library to use command line options
 suppressPackageStartupMessages(library("optparse",lib.loc="~/scratch/DATA/Rlibraries/"))
 option_list <- list(
     make_option(c("-v", "--verbose"), action="store_true", default=TRUE, help="Print extra output [default]"),
