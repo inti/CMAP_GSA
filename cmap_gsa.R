@@ -17,7 +17,7 @@ suppressPackageStartupMessages(library("optparse",lib.loc="~/scratch/DATA/Rlibra
 option_list <- list(
     make_option(c("-v", "--verbose"), action="store_true", default=TRUE, help="Print extra output [default]"),
     make_option(c("-q", "--quietly"), action="store_false", dest="verbose", help="Print little output"),
-    make_option(c("-o","--outfile"), type="character", default="cmap_gsa.out.txt", help="Output file Name", metavar=NULL),
+    make_option(c("-o","--outfile"), type="character", default="cmap_gsa.out.txt", help="Output file Name", metavar="NULL"),
     make_option(c("-d","--distance"), type="integer", default=20, help="Max SNP-to-gene distance allowed (in kb)", metavar=NULL),
     make_option(c("--gene_file"), type="character", help="File with genes to be analyse", metavar=NULL),
     make_option(c("--clinical_trials"), default= "data/trials_4_cmap_drugs.txt",type="character", help="File with gene conditions", metavar=NULL),
@@ -43,7 +43,7 @@ option_list <- list(
 
 # get command line options, if help option encountered print help and exit, 
 # otherwise if options not found on command line then set defaults, 
-opt <- parse_args(OptionParser(option_list=option_list))
+opt <- parse_args(OptionParser(option_list=option_list), positional_arguments = TRUE)
 
 # DESCRIPTION
 # received as input a file with genes and conditions test is the expression of the genes is affected in the CMAP data.
@@ -271,7 +271,6 @@ if (opt$auc == TRUE ) {
                  }
 	,.progress=create_progress_bar(name="text"),.parallel=F)
 
-	print_OUT("Calculating AUC values for each PC on each condition of interest.");
 	if (opt$n_perm > 0) {
 		print_OUT("   '-> For each condition I will calculate AUC values based on the [ empirical_Z ] column")
 		col_val = "empirical_Z";
