@@ -1,4 +1,15 @@
 #!/usr/bin/env Rscript
+#
+#
+#$ -cwd
+#$ -j y
+#$ -S /bin/bash
+#$ -q long.q,short.q
+#$ -r yes
+#$ -V
+#$ -l h_vmem=20.0G
+#$ -N Rcmap
+# -pe multi_thread 20
 
 ### DEFINE SOME USEFUL FUNCTIONS
 
@@ -17,18 +28,18 @@ suppressPackageStartupMessages(library("optparse",lib.loc="~/scratch/DATA/Rlibra
 option_list <- list(
     make_option(c("-v", "--verbose"), action="store_true", default=TRUE, help="Print extra output [default]"),
     make_option(c("-q", "--quietly"), action="store_false", dest="verbose", help="Print little output"),
-    make_option(c("-o","--outfile"), type="character", default="cmap_gsa.out.txt", help="Output file Name", metavar="NULL"),
-    make_option(c("-d","--distance"), type="integer", default=20, help="Max SNP-to-gene distance allowed (in kb)", metavar="NULL"),
+    make_option(c("-o","--outfile"), type="character", default="cmap_gsa.out.txt", help="Output file Name", metavar=NULL),
+    make_option(c("-d","--distance"), type="integer", default=20, help="Max SNP-to-gene distance allowed (in kb)", metavar=NULL),
     make_option(c("--gene_file"), type="character", help="File with genes to be analyse", metavar=NULL),
     make_option(c("--clinical_trials"), default= "data/trials_4_cmap_drugs.txt",type="character", help="File with gene conditions", metavar=NULL),
-    #make_option(c("--pc_var"), default= 0.05,type="double", help="Threshold of variance explained to include PC in analysis", metavar=NULL),
-    make_option(c("--auc"), action="store_true", default= FALSE, help="Calcukate Area Under the Curve", metavar=NULL),	
+    make_option(c("--pc_var"), default= 0.05,type="double", help="Threshold of variance explained to include PC in analysis", metavar=NULL),
+    make_option(c("--auc"), action="store_true", default= FALSE, help="Calculate Area Under the Curve", metavar=NULL),	
     make_option(c("-b","--bootstraping"), action="store_true", default= "FALSE", help="Set AUC calculation on bootstraping mode. Default: DeLong method.", metavar=NULL),
     make_option(c("--correct_ci"), action="store_true", default= 'FALSE', help="Set correction for multuple testing on confidence interval of AUC values", metavar=NULL),
     make_option(c("--n.boot"), default= 1000,type="integer", help="Number of bootstraping replicates to calculate AUC values", metavar=NULL),
     make_option(c("--ci_boot"), default= 0.95,type="double", help="Condidence interval value for AUC values", metavar=NULL),
     make_option(c("--plot"), action="store_true",default= FALSE,type="logical", help="Make plots of results. It need library ggplot2 installed", metavar=NULL),
-    make_option(c("--gsa"), action="store_true",default= FALSE,type="logical", help="Run enrichemnt analysis using PAGE method", metavar=NULL),
+    make_option(c("--gsa"), action="store_true",default= FALSE,type="logical", help="Print out results from enrichemnt analysis using PAGE method", metavar=NULL),
     make_option(c("--n_perm"), default= 0,type="integer", help="Number of permutation to calculate the null distribution and significance for  enrichmet results", metavar=NULL),
     make_option(c("--one_sided"), action="store_true",default= TRUE,type="logical", help="Enrichment test is one sided. Differential regulation regarding is up or down", metavar=NULL),
     make_option(c("--two_sided"), action="store_true",default= FALSE, dest="one_sided",type="logical", help="Enrichment test is two sided. Test both up and down regulation separately", metavar=NULL),    
@@ -43,7 +54,7 @@ option_list <- list(
 
 # get command line options, if help option encountered print help and exit, 
 # otherwise if options not found on command line then set defaults, 
-opt <- parse_args(OptionParser(option_list=option_list), positional_arguments = TRUE)
+opt <- parse_args(OptionParser(option_list=option_list))
 
 # DESCRIPTION
 # received as input a file with genes and conditions test is the expression of the genes is affected in the CMAP data.
@@ -73,7 +84,7 @@ load("data/CMAP.RData")
 print_OUT("Loading AFFY probes to gene mapping to parse CMAP data from [ data/probes_annotation.txt ]")
 probe_annot<-read.table("data/probes_annotation.txt",header=T,sep="\t")
 #print_OUT("Detecting probes that match to more than one gene")
-#probe_annot = ddply(probe_annot, .(affy_hg_u133_plus_2), function(d) if (length(unique(d$ensembl_gene_id)) == 1){return(d)},.progress=create_progress_bar(name="text"),.parallel=T)
+#probe_annot = ddply(probe_annot, .(affy_hg_u133_plus_2), function(d) if (length(unique(d$ensembl_gene_id)) == 1){return(d)},.progress=create_progress_bar(name="text"),.parallel=TRUE   )
 
 print_OUT("Filtering out probes matching to multiple genes")
 avg_data = avg_data[,unique(probe_annot$affy_hg_u133_plus_2)]
@@ -123,7 +134,7 @@ if (opt$collapse_probes_eigen == TRUE ){
 if (collapse_method != 0){
 	print_OUT(paste("Collapsing probe values at gene level using method [ ",collapse_method," ].",sep=""))
 	suppressPackageStartupMessages(library(WGCNA,lib.loc="~/scratch/DATA/Rlibraries/"))
-	gene_id = ddply(probe_annot, .(affy_hg_u133_plus_2), summarise, gene_id=unique(ensembl_gene_id),.parallel=T)
+	gene_id = ddply(probe_annot, .(affy_hg_u133_plus_2), summarise, gene_id=unique(ensembl_gene_id),.parallel=TRUE   )
 	data = t(avg_data)
 	data = collapseRows( data,rowGroup = gene_id$gene_id,rowID = rownames(data),method=collapse_method)
 	avg_data = t(data$datETcollapsed)
@@ -134,7 +145,7 @@ if (collapse_method != 0){
 
 ##### PAGE analysis #####
 print_OUT("Running PAGE analysis");
-print_OUT(paste("   '-> WIll run [ ",opt$n_perm," ] permutations to calculate the statistic under the null",sep=""))
+print_OUT(paste("   '-> Will run [ ",opt$n_perm," ] permutations to calculate the statistic under the null",sep=""))
 drug_summary_stats = ldply(rownames(avg_data), function(drug){ 
 		data = avg_data[drug,];
 		data_pow2 = data^2;
@@ -163,7 +174,7 @@ drug_de_df=ddply(annotated_data, .(condition), function(d) {
 					z = page_z( Sm ,mu,m,rho);
 					return(z); 
 				}
-			,.parallel=T)
+			,.parallel=TRUE   )
 		} else { # else is two sided test
 			observed_page_z = ldply(rownames(cmap_subset), function(drug)  {  
 					lfc = cmap_subset[drug,];
@@ -175,7 +186,7 @@ drug_de_df=ddply(annotated_data, .(condition), function(d) {
 					z = page_z( Sm ,mu,m,rho);
 					return(z); 
 				}
-			,.parallel=T)
+			,.parallel=TRUE   )
 		}
 		observed_page_z$drug = rownames(cmap_subset);
 		colnames(observed_page_z) = c("page_z","drug");
@@ -196,7 +207,7 @@ drug_de_df=ddply(annotated_data, .(condition), function(d) {
 								z = page_z( Sm ,mu,m,rho);
 								return(z);
 							}
-						,.parallel=T)
+						,.parallel=TRUE   )
 					} else {
 						random_page_z = ldply(rownames(random_data), function(drug)  {
 								lfc = random_data[drug,];
@@ -208,12 +219,12 @@ drug_de_df=ddply(annotated_data, .(condition), function(d) {
 								z = page_z( Sm ,mu,m,rho);
 								return(z);
 							}
-						,.parallel=T)
+						,.parallel=TRUE   )
 
 					}
 					return(t(random_page_z));
 				}     
-			,.parallel=T)
+			,.parallel=TRUE   )
 			background = t(background)
 			rownames(background) = rownames(cmap_subset);
 			drug_z = ldply(observed_page_z$drug, function(drug)  {
@@ -258,6 +269,10 @@ if (opt$gsa == "TRUE"){
 # return a list on which each element is a matrix with the PC for each condition.
 if (opt$auc == TRUE ) {
 	print_OUT("Calculating AUC values for each gene-set");
+	print_OUT(paste("   '-> Estimating confidence intervals at [ ",opt$ci_boot," ] level.",sep=""));
+	if (opt$boot == "TRUE"){
+		print_OUT(paste("   '-> Will run [ ",opt$n.boot," ] bootstrap replicates to calculate confidence intervals and AUC values.",sep=""));
+	}
 	#print_OUT(paste("   '-> Selecting for analysis PC explaining more than [ ", opt$pc_var ," ] of variation.",sep=""));
 	drug_pca_df=dlply(drug_de_df, .(condition),  function(d) {
 			d=unique(d);
