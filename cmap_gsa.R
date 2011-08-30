@@ -18,7 +18,7 @@ option_list <- list(
     make_option(c("-v", "--verbose"), action="store_true", default=TRUE, help="Print extra output [default]"),
     make_option(c("-q", "--quietly"), action="store_false", dest="verbose", help="Print little output"),
     make_option(c("-o","--outfile"), type="character", default="cmap_gsa.out.txt", help="Output file Name", metavar="NULL"),
-    make_option(c("-d","--distance"), type="integer", default=20, help="Max SNP-to-gene distance allowed (in kb)", metavar=NULL),
+    make_option(c("-d","--distance"), type="integer", default=20, help="Max SNP-to-gene distance allowed (in kb)", metavar="NULL"),
     make_option(c("--gene_file"), type="character", help="File with genes to be analyse", metavar=NULL),
     make_option(c("--clinical_trials"), default= "data/trials_4_cmap_drugs.txt",type="character", help="File with gene conditions", metavar=NULL),
     #make_option(c("--pc_var"), default= 0.05,type="double", help="Threshold of variance explained to include PC in analysis", metavar=NULL),
