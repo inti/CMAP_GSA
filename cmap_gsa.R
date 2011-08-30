@@ -21,7 +21,7 @@ option_list <- list(
     make_option(c("-d","--distance"), type="integer", default=20, help="Max SNP-to-gene distance allowed (in kb)", metavar=NULL),
     make_option(c("--gene_file"), type="character", help="File with genes to be analyse", metavar=NULL),
     make_option(c("--clinical_trials"), default= "data/trials_4_cmap_drugs.txt",type="character", help="File with gene conditions", metavar=NULL),
-    make_option(c("--pc_var"), default= 0.05,type="double", help="Threshold of variance explained to include PC in analysis", metavar=NULL),
+    #make_option(c("--pc_var"), default= 0.05,type="double", help="Threshold of variance explained to include PC in analysis", metavar=NULL),
     make_option(c("--auc"), action="store_true", default= FALSE, help="Calcukate Area Under the Curve", metavar=NULL),	
     make_option(c("-b","--bootstraping"), action="store_true", default= "FALSE", help="Set AUC calculation on bootstraping mode. Default: DeLong method.", metavar=NULL),
     make_option(c("--correct_ci"), action="store_true", default= 'FALSE', help="Set correction for multuple testing on confidence interval of AUC values", metavar=NULL),
@@ -37,7 +37,8 @@ option_list <- list(
     make_option(c("--ensembl_id"), action="store_true",dest="hugo_id",default= FALSE,type="logical", help="User gene ids are ensembl gene ids", metavar=NULL),
     make_option(c("--collapse_probes_mean"), action="store_true",default= FALSE,type="logical", help="Collapse probe level information into a single gene-leve value by averaging individual probe values", metavar=NULL),
     make_option(c("--collapse_probes_abs_max"), action="store_true",default= FALSE,type="logical", help="Choose the row with the highest absolute value", metavar=NULL),	
-    make_option(c("--collapse_probes_abs_min"), action="store_true",default= FALSE,type="logical", help="Choose the row with the lowest absolute value", metavar=NULL)
+    make_option(c("--collapse_probes_abs_min"), action="store_true",default= FALSE,type="logical", help="Choose the row with the lowest absolute value", metavar=NULL),
+    make_option(c("--collapse_probes_eigen"), action="store_true",default= FALSE,type="logical", help="Choose the row with the lowest absolute value", metavar=NULL)
 )
 
 # get command line options, if help option encountered print help and exit, 
@@ -116,8 +117,11 @@ if (opt$collapse_probes_abs_max == TRUE) {
 if (opt$collapse_probes_abs_min == TRUE ){
 	collapse_method = "absMinMean"; # min absolute value
 }
+if (opt$collapse_probes_eigen == TRUE ){
+        collapse_method = "ME"; # eigen vector
+}
 if (collapse_method != 0){
-	print_OUT("Collapsing probe values at gene level")
+	print_OUT(paste("Collapsing probe values at gene level using method [ ",collapse_method," ].",sep=""))
 	suppressPackageStartupMessages(library(WGCNA,lib.loc="~/scratch/DATA/Rlibraries/"))
 	gene_id = ddply(probe_annot, .(affy_hg_u133_plus_2), summarise, gene_id=unique(ensembl_gene_id),.parallel=T)
 	data = t(avg_data)
@@ -129,116 +133,119 @@ if (collapse_method != 0){
 
 
 ##### PAGE analysis #####
-if (opt$gsa == "TRUE"){
-	print_OUT("Running PAGE analysis");
-	drug_summary_stats = ldply(rownames(avg_data), function(drug){ 
-			data = avg_data[drug,];
-			data_pow2 = data^2;
-			return(c(mean(data,na.rm=T),sd(data,na.rm=T),mean(data_pow2,na.rm=T),sd(data_pow2,na.rm=T)  ));
+print_OUT("Running PAGE analysis");
+print_OUT(paste("   '-> WIll run [ ",opt$n_perm," ] permutations to calculate the statistic under the null",sep=""))
+drug_summary_stats = ldply(rownames(avg_data), function(drug){ 
+		data = avg_data[drug,];
+		data_pow2 = data^2;
+		return(c(mean(data,na.rm=T),sd(data,na.rm=T),mean(data_pow2,na.rm=T),sd(data_pow2,na.rm=T)  ));
+	}
+)
+rownames(drug_summary_stats) = rownames(avg_data);
+colnames(drug_summary_stats) = c("mean_logFC","sd_logFC","mean_logFC_pow2","sd_logFC_pow2")
+
+
+drug_de_df=ddply(annotated_data, .(condition), function(d) {
+		d=unique(d);
+		if (collapse_method != "NULL"){
+			cmap_subset=avg_data[,d$ensembl_gene_id];
+		} else {
+			cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
 		}
-	)
-	rownames(drug_summary_stats) = rownames(avg_data);
-	colnames(drug_summary_stats) = c("mean_logFC","sd_logFC","mean_logFC_pow2","sd_logFC_pow2")
+		if (opt$one_sided == "TRUE") {
+			
+			observed_page_z = ldply(rownames(cmap_subset), function(drug)  {
+					lfc = cmap_subset[drug,];
+					Sm = mean(lfc,na.rm=T);
+					m = sum(length(lfc) - abs(is.na(lfc)));
+					mu = drug_summary_stats[drug,"mean_logFC"];
+					rho = drug_summary_stats[drug,"sd_logFC"];
+					z = page_z( Sm ,mu,m,rho);
+					return(z); 
+				}
+			,.parallel=T)
+		} else { # else is two sided test
+			observed_page_z = ldply(rownames(cmap_subset), function(drug)  {  
+					lfc = cmap_subset[drug,];
+					lfc = lfc^2;
+					Sm = mean(lfc,na.rm=T);
+					m = sum(length(lfc) - abs(is.na(lfc)));
+					mu = drug_summary_stats[drug,"mean_logFC_pow2"];
+					rho = drug_summary_stats[drug,"sd_logFC_pow2"];
+					z = page_z( Sm ,mu,m,rho);
+					return(z); 
+				}
+			,.parallel=T)
+		}
+		observed_page_z$drug = rownames(cmap_subset);
+		colnames(observed_page_z) = c("page_z","drug");
 
-	drug_de_df=ddply(annotated_data, .(condition), function(d) {
-	                d=unique(d);
-			if (collapse_method != "NULL"){
-	                	cmap_subset=avg_data[,d$ensembl_gene_id];
-			} else {
-				cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
-			}
-			if (opt$one_sided == "TRUE") {
-				
-                		observed_page_z = ldply(rownames(cmap_subset), function(drug)  {
-						lfc = cmap_subset[drug,];
-						Sm = mean(lfc,na.rm=T);
-						m = sum(length(lfc) - abs(is.na(lfc)));
-						mu = drug_summary_stats[drug,"mean_logFC"];
-						rho = drug_summary_stats[drug,"sd_logFC"];
-						z = page_z( Sm ,mu,m,rho);
-						return(z); 
+		if (opt$n_perm > 0) { 
+			geneset_size = ncol(cmap_subset); 
+
+			background = ldply(1:opt$n_perm, function(x)   {
+					random_index = sample(1:ncol(avg_data), geneset_size);
+					random_data = avg_data[,random_index];
+					if (opt$one_sided == "TRUE") {
+						random_page_z = ldply(rownames(random_data), function(drug)  {
+								lfc = random_data[drug,];
+								Sm = mean(lfc,na.rm=T);
+								m = sum(length(lfc) - abs(is.na(lfc)));
+								mu = drug_summary_stats[drug,"mean_logFC"];
+								rho = drug_summary_stats[drug,"sd_logFC"];
+								z = page_z( Sm ,mu,m,rho);
+								return(z);
+							}
+						,.parallel=T)
+					} else {
+						random_page_z = ldply(rownames(random_data), function(drug)  {
+								lfc = random_data[drug,];
+								lfc = lfc^2;
+								Sm = mean(lfc,na.rm=T);
+								m = sum(length(lfc) - abs(is.na(lfc)));
+								mu = drug_summary_stats[drug,"mean_logFC_pow2"];
+								rho = drug_summary_stats[drug,"sd_logFC_pow2"];
+								z = page_z( Sm ,mu,m,rho);
+								return(z);
+							}
+						,.parallel=T)
+
 					}
-				,.parallel=T)
-        		} else { # else is two sided test
-				observed_page_z = ldply(rownames(cmap_subset), function(drug)  {  
-                                                lfc = cmap_subset[drug,];
-						lfc = lfc^2;
-                                                Sm = mean(lfc,na.rm=T);
-                                                m = sum(length(lfc) - abs(is.na(lfc)));
-                                                mu = drug_summary_stats[drug,"mean_logFC_pow2"];
-                                                rho = drug_summary_stats[drug,"sd_logFC_pow2"];
-                                                z = page_z( Sm ,mu,m,rho);
-                                                return(z); 
-                                        }
-                                ,.parallel=T)
-			}
-			observed_page_z$drug = rownames(cmap_subset);
-			colnames(observed_page_z) = c("page_z","drug");
-
-			if (opt$n_perm > 0) { 
-				geneset_size = ncol(cmap_subset); 
-	
-				background = ldply(1:opt$n_perm, function(x)   {
-						random_index = sample(1:ncol(avg_data), geneset_size);
-						random_data = avg_data[,random_index];
-						if (opt$one_sided == "TRUE") {
-							random_page_z = ldply(rownames(random_data), function(drug)  {
-                                                			lfc = random_data[drug,];
-                                                			Sm = mean(lfc,na.rm=T);
-                                                			m = sum(length(lfc) - abs(is.na(lfc)));
-                                                			mu = drug_summary_stats[drug,"mean_logFC"];
-                                                			rho = drug_summary_stats[drug,"sd_logFC"];
-                                                			z = page_z( Sm ,mu,m,rho);
-                                                			return(z);
-                                        			}
-                                			,.parallel=T)
-						} else {
-							random_page_z = ldply(rownames(random_data), function(drug)  {
-                                                        	        lfc = random_data[drug,];
-									lfc = lfc^2;
-                                                        	        Sm = mean(lfc,na.rm=T);
-                                                        	        m = sum(length(lfc) - abs(is.na(lfc)));
-                                                        	        mu = drug_summary_stats[drug,"mean_logFC_pow2"];
-                                                        	        rho = drug_summary_stats[drug,"sd_logFC_pow2"];
-                                                        	        z = page_z( Sm ,mu,m,rho);
-                                                        	        return(z);
-                                                        	}
-                                                	,.parallel=T)
-
-						}
-                                                return(t(random_page_z));
-					}     
-				,.parallel=T)
-				background = t(background)
-				rownames(background) = rownames(cmap_subset);
-				drug_z = ldply(observed_page_z$drug, function(drug)  {
-						background_mean = mean(background[drug,],na.rm=T)
-						background_sd = sd(background[drug,],na.rm=T)
-						z = (observed_page_z[which(observed_page_z$drug == drug),"page_z"] - background_mean)/background_sd; 
-						return( c(drug,z,background_mean,background_sd )  );
-					} 
-				)
-				colnames(drug_z) = c("drug","empirical_Z","background_mean","background_sd");
-				drug_z$empirical_Z = as.numeric(drug_z$empirical_Z);
-				drug_z$background_mean = as.numeric(drug_z$background_mean);
-				drug_z$background_sd = as.numeric(drug_z$background_sd);
-				drug_z = drug_z[order(-drug_z$empirical_Z),];
-				if (opt$one_sided == TRUE){ 
-                                	drug_z$lfdr_empirical_z<-fdrtool( pnorm(drug_z$empirical_Z,lower.tail=F),statistic = "pvalue", plot=F,verbose=F )$lfdr
-                        	} else {
-                                	drug_z$lfdr_empirical_z<-fdrtool( drug_z$empirical_Z,statistic = "normal", plot=F,verbose=F )$lfdr
-                        	}
-				observed_page_z = merge(observed_page_z,drug_z,by="drug")
-			} 
-			## add FDR ###
+					return(t(random_page_z));
+				}     
+			,.parallel=T)
+			background = t(background)
+			rownames(background) = rownames(cmap_subset);
+			drug_z = ldply(observed_page_z$drug, function(drug)  {
+					background_mean = mean(background[drug,],na.rm=T)
+					background_sd = sd(background[drug,],na.rm=T)
+					z = (observed_page_z[which(observed_page_z$drug == drug),"page_z"] - background_mean)/background_sd; 
+					return( c(drug,z,background_mean,background_sd )  );
+				} 
+			)
+			colnames(drug_z) = c("drug","empirical_Z","background_mean","background_sd");
+			drug_z$empirical_Z = as.numeric(drug_z$empirical_Z);
+			drug_z$background_mean = as.numeric(drug_z$background_mean);
+			drug_z$background_sd = as.numeric(drug_z$background_sd);
+			drug_z = drug_z[order(-drug_z$empirical_Z),];
 			if (opt$one_sided == TRUE){ 
-				observed_page_z$lfdr_page_z<-fdrtool( pnorm(observed_page_z$page_z,lower.tail=F),statistic = "pvalue", plot=F,verbose=F )$lfdr
+				drug_z$lfdr_empirical_z<-fdrtool( pnorm(drug_z$empirical_Z,lower.tail=F),statistic = "pvalue", plot=F,verbose=F )$lfdr
 			} else {
-				observed_page_z$lfdr_page_z<-fdrtool( observed_page_z$page_z,statistic = "normal", plot=F,verbose=F )$lfdr
+				drug_z$lfdr_empirical_z<-fdrtool( drug_z$empirical_Z,statistic = "normal", plot=F,verbose=F )$lfdr
 			}
-	                return(observed_page_z);
-	        }
-	,.progress=create_progress_bar(name="text"),.parallel=F)
+			observed_page_z = merge(observed_page_z,drug_z,by="drug")
+		} 
+		## add FDR ###
+		if (opt$one_sided == TRUE){ 
+			observed_page_z$lfdr_page_z<-fdrtool( pnorm(observed_page_z$page_z,lower.tail=F),statistic = "pvalue", plot=F,verbose=F )$lfdr
+		} else {
+			observed_page_z$lfdr_page_z<-fdrtool( observed_page_z$page_z,statistic = "normal", plot=F,verbose=F )$lfdr
+		}
+		return(observed_page_z);
+	}
+,.progress=create_progress_bar(name="text"),.parallel=F)
+
+if (opt$gsa == "TRUE"){
 	gsa_out_file = paste(opt$outfile,".PAGE.txt",sep="")
 	print_OUT(paste("   '-> Writing GSA results to [ ", gsa_out_file ," ]",sep=""));
 	write.table(drug_de_df,file=gsa_out_file,quote=FALSE,row.names=F,col.names=T,sep="\t");
@@ -250,79 +257,70 @@ if (opt$gsa == "TRUE"){
 # For condition get the gene data across all drugs instances and calculate the eigen values.
 # return a list on which each element is a matrix with the PC for each condition.
 if (opt$auc == TRUE ) {
-	print_OUT("Calculating PCA for each gene-set");
-	print_OUT(paste("   '-> Selecting for analysis PC explaining more than [ ", opt$pc_var ," ] of variation.",sep=""));
-	drug_pca_df=dlply(annotated_data, .(condition), function(d) {
+	print_OUT("Calculating AUC values for each gene-set");
+	#print_OUT(paste("   '-> Selecting for analysis PC explaining more than [ ", opt$pc_var ," ] of variation.",sep=""));
+	drug_pca_df=dlply(drug_de_df, .(condition),  function(d) {
 			d=unique(d);
-			if (collapse_method != "NULL"){
+                        if (collapse_method != "NULL"){
                                 cmap_subset=avg_data[,d$ensembl_gene_id];
                         } else {
                                 cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
                         }
-
-			drug_pca=prcomp(t(cmap_subset),center=T,scale=T);
-			matrix=summary(drug_pca)[["importance"]]
-			good_pcs<-which(matrix["Proportion of Variance",] >= opt$pc_var);
-			rot = as.data.frame(drug_pca$rotation);
-			rot = as.data.frame(rot[,names(good_pcs)]);
-			colnames(rot)=names(good_pcs)	
-			rot$drug=rownames(avg_data);
-			rot=merge(rot,trials_phase_4,by="drug");	
+			rot=merge(d,trials_phase_4,by="drug");
 			return(rot);
-		} 
+                 }
 	,.progress=create_progress_bar(name="text"),.parallel=F)
 
-
 	print_OUT("Calculating AUC values for each PC on each condition of interest.");
-	eigen_vector_auc_table = llply(names(drug_pca_df), function(condition) {
+	if (opt$n_perm > 0) {
+		print_OUT("   '-> For each condition I will calculate AUC values based on the [ empirical_Z ] column")
+		col_val = "empirical_Z";
+	} else {
+		col_val = "page_z";
+	}
+	auc_table = llply(names(drug_pca_df), function(condition) {
 			rot = drug_pca_df[[condition]];
 			target = llply(unique(rot$disease), function(condition)   abs(rot$disease == condition)    );
 			names(target) = unique(rot$disease);
-			pcs = unique(grep("PC",colnames(rot),value=T));
-			N_pcs = length(pcs);
-			n_test = N_pcs*length(names(target));
+			n_test = length(names(target));
 			if (opt$correct_ci == TRUE){
 				conf.level = 1 - (1 - opt$ci_boot)^n_test; 
 			 } else {
 				conf.level=opt$ci_boot;
-			}	
-			table = ldply( pcs,  function(eigen_vector) {
-				#cat("\tWorking on eigen vector [ ",eigen_vector," ]\n",sep="")
-				ldply( names(target), function(condition) {
-						if (opt$boot == "FALSE" & sum(response = target[[ condition  ]],na.rm=T) == 1) { return() }                                
-						if (opt$boot == "TRUE"){
-						   auc_values<-ci.auc(response = target[[ condition  ]], predictor = rot[,eigen_vector],
-							boot.stratified=TRUE,boot.n=opt$n.boot,direction="<", conf.level =conf.level,
-							method="bootstrap",progress=create_progress_bar(name="none"));
-						} else {
-						   # Using DeLong method
-						   auc_values<-ci.auc(response = target[[ condition  ]], predictor = rot[,eigen_vector],direction="<",conf.level =conf.level,progress=create_progress_bar(name="none"));
-						}
-						auc_values=t(as.data.frame(unclass(auc_values)));
-						auc_values=as.data.frame(auc_values);
-						colnames(auc_values)<-c("low_ci","median","up_ci");
-						auc_values$disease<-condition;
-						auc_values$N_drugs<-sum(target[[condition]],na.rm=T);
-						auc_values$eigen_vector = eigen_vector;
-						auc_values$conf.level = conf.level;
-						return(auc_values);
+			}
+			ldply( names(target), function(condition) {
+					if (opt$boot == "FALSE" & sum(response = target[[ condition  ]],na.rm=T) == 1) { return() }                                
+					if (opt$boot == "TRUE"){
+					   auc_values<-ci.auc(response = target[[ condition  ]], predictor = rot[,col_val],
+						boot.stratified=TRUE,boot.n=opt$n.boot,direction="<", conf.level =conf.level,
+						method="bootstrap",progress=create_progress_bar(name="none"));
+					} else {
+					   # Using DeLong method
+					   auc_values<-ci.auc(response = target[[ condition  ]], predictor = rot[,col_val],direction="<",conf.level =conf.level,progress=create_progress_bar(name="none"));
 					}
-				)
-			} ,.parallel=T);
-			return(table);
+					auc_values=t(as.data.frame(unclass(auc_values)));
+					auc_values=as.data.frame(auc_values);
+					colnames(auc_values)<-c("low_ci","median","up_ci");
+					auc_values$disease<-condition;
+					auc_values$N_drugs<-sum(target[[condition]],na.rm=T);
+					#auc_values$eigen_vector = eigen_vector;
+					auc_values$conf.level = conf.level;
+					return(auc_values);
+				}
+			)
 		}
 	,.progress=create_progress_bar(name="text"))
-	names(eigen_vector_auc_table)=names(drug_pca_df);
+	names(auc_table)=names(drug_pca_df);
 
-	# PLOT TO FILES
+	# PLOT AND WRITTE TO FILES
 	if (opt$plot == TRUE){
-		print_OUT("Writting output files and plots");
+		print_OUT(paste("Writting output files and plots to [ ",opt$outfile,".condition.* ] with extensions txt and pdf, respectively ",sep=""));
 	} else {
-		print_OUT("Writting output files");
+		print_OUT(paste("Writting output files to [ ",opt$outfile,".condition.txt ]",sep=""));
 	}
 
-	l_ply(names(eigen_vector_auc_table), function(condition) {
-			data=eigen_vector_auc_table[[ condition  ]];
+	l_ply(names(auc_table), function(condition) {
+			data=auc_table[[ condition  ]];
 			data$touch_05 = abs( (data$low_ci - 0.5)*( data$up_ci - 0.5 )  > 0 );
 			data_filtered = data[which(data$touch_05 > 0),];
 			data_filtered$disease<-factor(data_filtered$disease, levels=  unique(factor(data_filtered[order(data_filtered$low_ci),"disease"])));
@@ -345,10 +343,10 @@ if (opt$auc == TRUE ) {
 						panel.grid.major=theme_blank(),
 						axis.line=theme_segment(),
 						legend.position="none");
-				file_plot=paste(opt$outfile,condition,".pdf",sep="");
+				file_plot=paste(opt$outfile,".",condition,".AUC.pdf",sep="");
 				ggsave(plot=plot,file=file_plot,width=15,height=7);
 			}
-			file_table=paste(opt$outfile,condition,".txt",sep="");
+			file_table=paste(opt$outfile,".",condition,".AUC.txt",sep="");
 			write.table(data,file=file_table,quote=FALSE,row.names=F,col.names=T,sep="\t");
 		}
 	,.progress=create_progress_bar(name="text"))
