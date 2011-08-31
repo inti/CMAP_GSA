@@ -12,8 +12,9 @@
 # -pe multi_thread 20
 
 ### DEFINE SOME USEFUL FUNCTIONS
-mean_sample_from_vector = function(my_vector,unit_size,n_samples,par=FALSE){
+mean_sample_from_vector = function(my_vector,unit_size,n_samples,par=FALSE,side = 1){
         random_data=ldply(1:n_samples, function(replicate) {
+			if (side == 2){ my_vector = my_vector^2; }
                         mean(  my_vector[ sample(1:length(my_vector),size=unit_size) ]        ,na.rm=T)
                 }
         ,.parallel=par)
@@ -48,10 +49,10 @@ option_list <- list(
     make_option(c("--gsa"), action="store_true",default= FALSE,type="logical", help="Print out results from enrichemnt analysis using PAGE method", metavar=NULL),
     make_option(c("--n_perm"), default= 0,type="integer", help="Number of permutation to calculate the null distribution and significance for  enrichmet results", metavar=NULL),
     make_option(c("--one_sided"), action="store_true",default= TRUE,type="logical", help="Enrichment test is one sided. Differential regulation regarding is up or down", metavar=NULL),
-    make_option(c("--two_sided"), action="store_true",default= FALSE, dest="one_sided",type="logical", help="Enrichment test is two sided. Test both up and down regulation separately", metavar=NULL),    
+    make_option(c("--two_sided"), action="store_false",dest="one_sided",type="logical", help="Enrichment test is two sided. Test both up and down regulation separately", metavar=NULL),    
     make_option(c("--lfdr"), action="store_true",default= FALSE,type="logical", help="Calculate local FDR values for PAGE results", metavar=NULL),
     make_option(c("--hugo_id"), action="store_true",default= TRUE,type="logical", help="User gene ids are Hugo symbols", metavar=NULL),
-    make_option(c("--ensembl_id"), action="store_true",dest="hugo_id",default= FALSE,type="logical", help="User gene ids are ensembl gene ids", metavar=NULL),
+    make_option(c("--ensembl_id"), action="store_false",dest="hugo_id",type="logical", help="User gene ids are ensembl gene ids", metavar=NULL),
     make_option(c("--collapse_probes_mean"), action="store_true",default= FALSE,type="logical", help="Collapse probe level information into a single gene-leve value by averaging individual probe values", metavar=NULL),
     make_option(c("--collapse_probes_abs_max"), action="store_true",default= FALSE,type="logical", help="Choose the row with the highest absolute value", metavar=NULL),	
     make_option(c("--collapse_probes_abs_min"), action="store_true",default= FALSE,type="logical", help="Choose the row with the lowest absolute value", metavar=NULL),
@@ -115,19 +116,19 @@ data=read.table(file=opt$gene_file,sep="\t")
 colnames(data)=c("condition","gene_id")
 data$gene_id = toupper(data$gene_id)
 # add annotation to data.
-if (opt$hugo_id == FALSE){
-	annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="ensembl_gene_id")
-} else {
+if (opt$hugo_id == TRUE ){
 	annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="hgnc_symbol")
-}
+} else {
+	annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="ensembl_gene_id");
+} 
 # check is there are more than 1 annotated genes
 if (nrow(annotated_data) == 0){
-	print_OUT("No genes mapped to data. Leaving analysis here.");
+	print_OUT("No genes mapped to data (i.e. 1 or less). Leaving analysis here. (1)");
 	quit();
 }
 
-if (length(unique(annotated_data$ensembl_gene_id)) < 2){
-        print_OUT("No genes mapped to data. Leaving analysis here.");
+if (length(unique(annotated_data$gene_id)) < 2){
+        print_OUT("No genes mapped to data (i.e 1 or less). Leaving analysis here. (2)");
         quit();
 }
 
@@ -157,7 +158,7 @@ if (collapse_method != 0){
 	data = collapseRows( data,rowGroup = gene_id$gene_id,rowID = rownames(data),method=collapse_method)
 	avg_data = t(data$datETcollapsed)
 	tmp_cols=data.frame(colnames(avg_data))
-	annotated_data2=merge(annotated_data,tmp_cols,by.x="ensembl_gene_id",by.y="colnames.avg_data.")
+	annotated_data2=merge(annotated_data,tmp_cols,by.x="gene_id",by.y="colnames.avg_data.")
 }
 
 
@@ -291,7 +292,7 @@ if (opt$n_perm == 0){opt$n_perm = 1000}
 print_OUT(paste("   '->Calculating statistics under the null with [ ",opt$n_perm," ] samplings.",sep=""));
 diseases_gsa = ddply(diseases_gsa, .(condition,N),  function(d) {
 		my_vector = drug_de_df[which(drug_de_df$condition == unique(d$condition)),"empirical_Z"];
-		mean_sd_null = mean_sample_from_vector( my_vector,unique(d$N),opt$n_perm,FALSE  );
+		mean_sd_null = mean_sample_from_vector( my_vector,unique(d$N),opt$n_perm,FALSE , abs(opt$one_sided == TRUE));
 		d$mean_null = mean_sd_null$mean;
 		d$sd_null = mean_sd_null$sd;
 		d$Z  = (d$observed - mean_sd_null$mean)/mean_sd_null$sd;
