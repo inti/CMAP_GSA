@@ -118,9 +118,15 @@ data$gene_id = toupper(data$gene_id)
 # add annotation to data.
 if (opt$hugo_id == TRUE ){
 	annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="hgnc_symbol")
+	annotated_data$hgnc_symbol = annotated_data$gene_id;
+	annotated_data$gene_id = annotated_data$ensembl_gene_id;
 } else {
 	annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="ensembl_gene_id");
-} 
+	annotated_data$ensembl_gene_id = annotated_data$gene_id;
+}
+# filter condition with less than 2 genes
+annotated_data = ddply(annotated_data,.(condition), function(d) if( length(unique(d$gene_id)) > 1 ){  return(d) })
+ 
 # check is there are more than 1 annotated genes
 if (nrow(annotated_data) == 0){
 	print_OUT("No genes mapped to data (i.e. 1 or less). Leaving analysis here. (1)");
@@ -258,7 +264,7 @@ drug_de_df=ddply(annotated_data, .(condition), function(d) {
 			drug_z$background_mean = as.numeric(drug_z$background_mean);
 			drug_z$background_sd = as.numeric(drug_z$background_sd);
 			drug_z = drug_z[order(-drug_z$empirical_Z),];
-			if (opt$one_sided == TRUE){ 
+			if (opt$one_sided == TRUE){
 				drug_z$lfdr_empirical_z<-fdrtool( pnorm(drug_z$empirical_Z,lower.tail=F),statistic = "pvalue", plot=F,verbose=F )$lfdr
 			} else {
 				drug_z$lfdr_empirical_z<-fdrtool( drug_z$empirical_Z,statistic = "normal", plot=F,verbose=F )$lfdr
