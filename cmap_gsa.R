@@ -12,7 +12,13 @@
 # -pe multi_thread 20
 
 ### DEFINE SOME USEFUL FUNCTIONS
-
+mean_sample_from_vector = function(my_vector,unit_size,n_samples,par=FALSE){
+        random_data=ldply(1:n_samples, function(replicate) {
+                        mean(  my_vector[ sample(1:length(my_vector),size=unit_size) ]        ,na.rm=T)
+                }
+        ,.parallel=par)
+        return(list(mean = mean(random_data,na.rm=T),sd = sd(random_data,na.rm=T)))
+}
 print_OUT<-function(string,LOG){
   print(paste(date(),"      ",string),quote = FALSE)  
 }
@@ -114,6 +120,18 @@ if (opt$hugo_id == FALSE){
 } else {
 	annotated_data<-merge(data,probe_annot[,c("affy_hg_u133_plus_2","ensembl_gene_id","hgnc_symbol")],by.x="gene_id",by.y="hgnc_symbol")
 }
+# check is there are more than 1 annotated genes
+if (nrow(annotated_data) == 0){
+	print_OUT("No genes mapped to data. Leaving analysis here.");
+	quit();
+}
+
+if (length(unique(annotated_data$ensembl_gene_id)) < 2){
+        print_OUT("No genes mapped to data. Leaving analysis here.");
+        quit();
+}
+
+
 
 ##### Define CMAP DATA
 
@@ -158,7 +176,7 @@ colnames(drug_summary_stats) = c("mean_logFC","sd_logFC","mean_logFC_pow2","sd_l
 
 drug_de_df=ddply(annotated_data, .(condition), function(d) {
 		d=unique(d);
-		if (collapse_method != "NULL"){
+		if (collapse_method != 0){
 			cmap_subset=avg_data[,d$ensembl_gene_id];
 		} else {
 			cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
@@ -257,12 +275,36 @@ drug_de_df=ddply(annotated_data, .(condition), function(d) {
 ,.progress=create_progress_bar(name="text"),.parallel=F)
 
 if (opt$gsa == "TRUE"){
-	gsa_out_file = paste(opt$outfile,".PAGE.txt",sep="")
-	print_OUT(paste("   '-> Writing GSA results to [ ", gsa_out_file ," ]",sep=""));
-	write.table(drug_de_df,file=gsa_out_file,quote=FALSE,row.names=F,col.names=T,sep="\t");
+	d_ply(drug_de_df, .(condition), function(data) {
+			gsa_out_file = paste(opt$outfile,".",unique(data$condition),".PAGE.txt",sep="")
+			print_OUT(paste("   '-> Writing GSA results to [ ", gsa_out_file ," ]",sep=""));
+			write.table(data,file=gsa_out_file,quote=FALSE,row.names=F,col.names=T,sep="\t");
+		}
+	)
 }
 
-
+##### CALCULATE GSA FOR DIEASES
+print_OUT("Running enrichment analysis for condition-disease based on drug-disease relationships.")
+drugs_plus_trials=merge(drug_de_df,trials_phase_4,by.x="drug")
+diseases_gsa = ddply(drugs_plus_trials, .(condition,disease), summarise, observed = mean(empirical_Z), N = length(unique(drug)))
+if (opt$n_perm == 0){opt$n_perm = 1000}
+print_OUT(paste("   '->Calculating statistics under the null with [ ",opt$n_perm," ] samplings.",sep=""));
+diseases_gsa = ddply(diseases_gsa, .(condition,N),  function(d) {
+		my_vector = drug_de_df[which(drug_de_df$condition == unique(d$condition)),"empirical_Z"];
+		mean_sd_null = mean_sample_from_vector( my_vector,unique(d$N),opt$n_perm,FALSE  );
+		d$mean_null = mean_sd_null$mean;
+		d$sd_null = mean_sd_null$sd;
+		d$Z  = (d$observed - mean_sd_null$mean)/mean_sd_null$sd;
+		return(d);
+	}
+,.progress=create_progress_bar(name="text"),.parallel=F)
+diseases_gsa = diseases_gsa[order(-diseases_gsa$Z),]
+d_ply(diseases_gsa, .(condition), function(data) {
+                disease_gsa_out_file = paste(opt$outfile,".",unique(data$condition),".DISEASE_GSA.txt",sep="")
+                print_OUT(paste("   '-> Writing disease GSA results to [ ", disease_gsa_out_file ," ]",sep=""));
+        	write.table(data,file=disease_gsa_out_file,quote=FALSE,row.names=F,col.names=T,sep="\t");
+	}
+)
 
 ##### AUC analysis #####
 # For condition get the gene data across all drugs instances and calculate the eigen values.
@@ -276,7 +318,7 @@ if (opt$auc == TRUE ) {
 	#print_OUT(paste("   '-> Selecting for analysis PC explaining more than [ ", opt$pc_var ," ] of variation.",sep=""));
 	drug_pca_df=dlply(drug_de_df, .(condition),  function(d) {
 			d=unique(d);
-                        if (collapse_method != "NULL"){
+                        if (collapse_method != 0){
                                 cmap_subset=avg_data[,d$ensembl_gene_id];
                         } else {
                                 cmap_subset=avg_data[,d$affy_hg_u133_plus_2];
