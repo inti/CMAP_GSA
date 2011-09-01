@@ -56,7 +56,8 @@ option_list <- list(
     make_option(c("--collapse_probes_mean"), action="store_true",default= FALSE,type="logical", help="Collapse probe level information into a single gene-leve value by averaging individual probe values", metavar=NULL),
     make_option(c("--collapse_probes_abs_max"), action="store_true",default= FALSE,type="logical", help="Choose the row with the highest absolute value", metavar=NULL),	
     make_option(c("--collapse_probes_abs_min"), action="store_true",default= FALSE,type="logical", help="Choose the row with the lowest absolute value", metavar=NULL),
-    make_option(c("--collapse_probes_eigen"), action="store_true",default= FALSE,type="logical", help="Choose the row with the lowest absolute value", metavar=NULL)
+    make_option(c("--collapse_probes_eigen"), action="store_true",default= FALSE,type="logical", help="Choose the row with the lowest absolute value", metavar=NULL),
+    make_option(c("--min_drugs"), default= 1,type="integer", help="Min number of drug for each disease with clinical trials to be included. Default = 1 or 2 if bootstraping is used for AUC values", metavar=NULL)
 )
 
 # get command line options, if help option encountered print help and exit, 
@@ -101,9 +102,9 @@ print_OUT(paste("Reading conditions for genes from [ ",opt$clinical_trials," ]",
 trials<-read.table( opt$clinical_trials ,header=T,sep="\t")
 trials_phase_4= unique(trials[which(trials$phase == "phase_iv"),])
 # filter diseases
-min_drugs = 5
+if (opt$bootstraping == TRUE) { opt$min_drugs = 2; }
 trials_phase_4=ddply(trials_phase_4, .(disease), function(data) {
-		if (length(unique(data$drug)) >= min_drugs ){
+		if (length(unique(data$drug)) >= opt$min_drugs ){
 			return(data)
 		}
 	}
