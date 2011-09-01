@@ -103,6 +103,7 @@ trials<-read.table( opt$clinical_trials ,header=T,sep="\t")
 trials_phase_4= unique(trials[which(trials$phase == "phase_iv"),])
 # filter diseases
 if (opt$bootstraping == TRUE) { opt$min_drugs = 2; }
+print_OUT(paste("Filtering out diseases with phase 4 clinical trials with less than [ ",opt$min_drugs ," ] drugs tested.",sep=""))
 trials_phase_4=ddply(trials_phase_4, .(disease), function(data) {
 		if (length(unique(data$drug)) >= opt$min_drugs ){
 			return(data)
