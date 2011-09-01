@@ -15,7 +15,7 @@
 mean_sample_from_vector = function(my_vector,unit_size,n_samples,par=FALSE,side = 1){
         random_data=ldply(1:n_samples, function(replicate) {
 			if (side == 2){ my_vector = my_vector^2; }
-                        mean(  my_vector[ sample(1:length(my_vector),size=unit_size) ]        ,na.rm=T)
+                        mean(  my_vector[ sample(1:length(my_vector),size=unit_size) ],na.rm=T)
                 }
         ,.parallel=par)
         return(list(mean = mean(random_data,na.rm=T),sd = sd(random_data,na.rm=T)))
@@ -293,7 +293,11 @@ if (opt$gsa == "TRUE"){
 ##### CALCULATE GSA FOR DIEASES
 print_OUT("Running enrichment analysis for condition-disease based on drug-disease relationships.")
 drugs_plus_trials=merge(drug_de_df,trials_phase_4,by.x="drug")
-diseases_gsa = ddply(drugs_plus_trials, .(condition,disease), summarise, observed = mean(empirical_Z), N = length(unique(drug)))
+if (opt$one_sided == TRUE){
+	diseases_gsa = ddply(drugs_plus_trials, .(condition,disease), summarise, observed = mean(empirical_Z,na.rm=T), N = length(unique(drug)))
+} else {
+	diseases_gsa = ddply(drugs_plus_trials, .(condition,disease), summarise, observed = mean(empirical_Z^2,na.rm=T), N = length(unique(drug)))
+}
 if (opt$n_perm == 0){opt$n_perm = 1000}
 print_OUT(paste("   '->Calculating statistics under the null with [ ",opt$n_perm," ] samplings.",sep=""));
 diseases_gsa = ddply(diseases_gsa, .(condition,N),  function(d) {
