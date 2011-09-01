@@ -294,7 +294,11 @@ if (opt$gsa == "TRUE"){
 ##### CALCULATE GSA FOR DIEASES
 print_OUT("Running enrichment analysis for condition-disease based on drug-disease relationships.")
 drugs_plus_trials=merge(drug_de_df,trials_phase_4,by.x="drug")
-diseases_gsa = ddply(drugs_plus_trials, .(condition,disease), summarise, observed = mean(empirical_Z), N = length(unique(drug)))
+if (opt$one_sided == TRUE){
+	diseases_gsa = ddply(drugs_plus_trials, .(condition,disease), summarise, observed = mean(empirical_Z,na.rm=T), N = length(unique(drug)))
+} else {
+	diseases_gsa = ddply(drugs_plus_trials, .(condition,disease), summarise, observed = mean(empirical_Z^2,na.rm=T), N = length(unique(drug)))
+}
 if (opt$n_perm == 0){opt$n_perm = 1000}
 print_OUT(paste("   '->Calculating statistics under the null with [ ",opt$n_perm," ] samplings.",sep=""));
 diseases_gsa = ddply(diseases_gsa, .(condition,N),  function(d) {
