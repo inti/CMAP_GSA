@@ -12,10 +12,10 @@
 # -pe multi_thread 20
 
 ### DEFINE SOME USEFUL FUNCTIONS
-mean_sample_from_vector = function(my_vector,unit_size,n_samples,par=FALSE,side = 1){
+mean_sample_from_vector = function(my_vector,unit_size,n_samples,par=FALSE,side = 1){ # sided = 1 => one_sided and sided = 0 => two_sided
         random_data=ldply(1:n_samples, function(replicate) {
-			if (side == 2){ my_vector = my_vector^2; }
-                        mean(  my_vector[ sample(1:length(my_vector),size=unit_size) ]        ,na.rm=T)
+			if (side == 0){ my_vector = my_vector^2; }
+                        mean(  my_vector[ sample(1:length(my_vector),size=unit_size) ], na.rm=T)
                 }
         ,.parallel=par)
         return(list(mean = mean(random_data,na.rm=T),sd = sd(random_data,na.rm=T)))
